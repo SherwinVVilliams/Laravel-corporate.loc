@@ -1,0 +1,1 @@
+<p>имя: {{ $data['name'] }} почта: {{ $data['email'] }} текст: {{ $data['text'] }}</p>

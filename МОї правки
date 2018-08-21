@@ -1,0 +1,667 @@
+Перші дії це створення бд, перенаправлення в каталог паблік в настройках openserver, настройка файла .env
+
+ми створили файл setting.php в config, там ми будем зберігати власні настройки такі як розширення для картинок, настройки пагінації і тд
+
+в файлі .env THEME - відповідає за імя папки в якій зберігаються шаблони
+
+Ми змінили пространство імен з App на Corp через консоль
+php artisan app:name Corp
+
+Щоб не було помилки при формуванні міграцій 
+потрібно в AppServiceProvider.php прописати
+use Illuminate\Support\Facades\Schema;
+public function boot()
+{
+    Schema::defaultStringLength(191);
+}
+
+ЦІКАВО: Route::resource(); - форміруємо группу маршрутів яка буде оброблятися контролерром типу Resource, 
+Resource контроллер - данний тип контроллерів використовується для построєній приложеній формата REST.
+REST - стіль архітектури ПО для створення розприділених систем і як правило данний стиль використовується для построєння веб служб
+при цьому управління інформації сервіса основується повністю на протоколі передачі данних(HTTP ...) 
+Консоль: php artisan make:conrtoller IndexController --resource
+Route::resource('/', 'IndexController', [ 'only' => ['index'], 'names' => ['index' => 'home']]); - в данному випадку ми створили тільки один маршрут index, при не вказуванні 3 аргументу буде створенно повний список маршуртів
+Подивитись список створенний маршрутів: php artisan route:list
+names - відповідає для задання іменні для маршрутів
+
+ВАЖЛИВО: подивитись більше про контроллери resource
+
+SiteController - родітєльский контроллер для всіх сторінок який будуть наслідувати всі контроллери. В захищенний свойствах з закінченням $slider_rep, ... будуть зберігатися обьєкти одноіменних класів, в цих классах будуть наші методи для роботи з базою данних, ці класси будуть називати Repository, вони будуть наслідуватись від родітєльского абстрактного класса в якому буде содержатись обща інформація. $template - ми будемо зберігати імя шаблона для відображення інформації на конкретні сторінці. $vars - для передачі данних в шаблон. $bar - відповідає за розміщення сайдбара.ContentRightBar i left - зберігаються в собі данні для передачі параметрів в сайдбар. renderOutput() - повертає вид. З дочєрнєго конструктора обовязково мають передаватись в родітєльский обєкти классів репозиторіїв і в самий обьєкт классу(тобто конструктор) має передаватись обьєкь моделі
+
+$bar - відповідає за відображення сайтбару допустимі значення left, right, no 
+	<div id="primary" class="sidebar-{{ $bar ? $bar : 'no' }}">
+використовуєм тернарний оператор вказуємо умову якщо $bar задана то використовуємо якщо ні то виводимо "no"
+
+в макєтах $navigation содержить собі вид який відповідає за меню навігації, формірується в родітєльському контроллері
+
+ indexController метод index()
+ $slider = view(env('THEME').'.slider')->render(); - метод render() преобразує вид в строку
+ $this->vars = array_add($this->vars, 'sliders', $sliders);
+ ця дія записує в $vars додатковий еленмент, а потім массив $vars передає значення в макети
+
+
+ {{ str_limit($item->text, 200) }} - str_limit() - виводимо тільки 200 символів
+
+
+Route::resource('portfolios', "PortfolioController", [
+	'parameters' => [
+		'portfolios' => 'alias',
+	]
+]); - третій параметр данного маршрута відповідає за імя параметру при передачі з шаблона тобто:
+<a href="{{ route('portfolios.show', ['alias' => $item->alias]) }}">
+якби ми не вказали то б довелося прописувати замість alias  portfolios,
+так як це фішка контроллера типу resource(передивитись про цей тип контроллерів)
+
+	protected function check($result){
+	if($result->isEmpty()){
+			return false;
+		}
+		$result->transform(function($item, $key) {
+			$item->img = json_decode($item->img);
+			return $item;
+		});
+		return $result;
+	} - код для декодірованія строки json(використовуємо тому що ми передали в поле img массив)
+
+
+$article->created_at - данне свойство являється типом классу карбон, детальніше: carbon.nesbot.com/docs/ - рекомендується подивитись
+
+Для змінни локалізації ми создаємо власну папки, копіруємо всі файли з стандартної папки en переписуємо всі значення в ньому використовуючи потрібну нам мову і додали власний файл ru.php - в якому знаходяться, переводи для опридільонних заголовків(типу над статьтями сайдбара)
+ВАЖЛИВО: потрібно в файлі app.php замінити значення ключа locale на імя нашої папки:
+
+...
+	'locale' => 'ru'
+...
+
+для вивода якої лібо константи використовувати можна або фасад Lang::get() або  trans('ru.latest_projects')
+
+{{ trans('ru.latest_projects') }} - виводимо константу latest_projects як знаходиться в файлі ru.php
+
+свойства які відповідають за мета теги ми створюємо в родітєльському контроллері і передаємо їх в массив vars але в дочєрнєму перед тим як їх передати ми їх переоприділяємо задаємо їм відповідні значення після того визиваємо метод renderOutput() який передасть їх в макет
+
+ПАГІНАЦІЯ
+Додаткова інфа: https://laravel.com/docs/version/pagination
+$this->model->select("*")->paginate(3);
+БАЗОВА ПАГІНАЦІЯ
+{{ $model->links() }}
+СТВОРЮЄМО СВОЮ ПАГІНАЦІЮ
+
+@if($articles->lastPage() > 1) - якщо у нас більше 1 статті потрібно використовувати пагінацію
+	@if($articles->currentPage() !== 1) - якщо ми знаходимось не на 1 сторінці
+		<a href = "{{ $articles->url($articles->currentPage() - 1)}}">{!! Lang::get('pagination.previous') !!}</a>
+		відображаємо кнопку переходу назад в якості ссилки передаючи попередню сторінку
+	@endif
+	@for($i = 1; $i <= $articles->lastPage(); ++$i)
+	проходимся циклмо поки не дойдемо до останньої сторінки
+		@if($articles->currentPage() == $i)
+		якщо сторінка на якій ми знаходимось = щетчику 
+		робимо кнопку виділеною
+			<a class="selected disabled">{{ $i }}</a>
+		@else
+			якщо ні кнопка активна і в якості ссилки передаємо щетчик в методі
+			<a href="{{ $articles->url($i) }}">{{ $i }}</a>
+		@endif
+	@endfor
+	@if($articles->currentPage() !== $articles->lastPage())
+		якщо теперішня стоінки не дорівнює останній відображаємо кнопку
+		<a href = "{{ $articles->url($articles->currentPage() + 1)}}">{!! Lang::get('pagination.next') !!}</a>
+		в якості ссилки передаємо теперішню сторінку + 1 номер 
+	@endif
+@endif
+
+@if($articles->lastPage() > 1)
+			@if($articles->currentPage() !== 1)
+				<a href = "{{ $articles->url($articles->currentPage() - 1)}}">{!! Lang::get('pagination.previous') !!}</a>
+			@endif
+			@for($i = 1; $i <= $articles->lastPage(); ++$i)
+				@if($articles->currentPage() == $i)
+					<a class="selected disabled">{{ $i }}</a>
+				@else
+					<a href="{{ $articles->url($i) }}">{{ $i }}</a>
+				@endif
+			@endfor
+			@if($articles->currentPage() !== $articles->lastPage())
+				<a href = "{{ $articles->url($articles->currentPage() + 1)}}">{!! Lang::get('pagination.next') !!}</a>
+			@endif
+		@endif
+
+
+
+
+
+
+ПІДГРУЖАЄМО МОДЕЛІ: для связаних данних
+$articles->load('user', 'category', 'comment'); - в якості параметра передаються імена моделей
+$article->comments->load('user')
+
+
+CСИЛАЄМОСЬ НА САЙТ ЗА КАРТИНКОЮ:
+<img alt="" src="https://www.gravatar.com/avatar/{{ $hash }}?d=mm&s=55" class="avatar" />
+якщо користувач зареєстрований на цьому сайті ми отримаємо кортинку в розмірі 55px.
+@set($hash, ($comment->email) ? md5($comment->email) ? $comment->user->email) - оприділяємо переменну $hash, через нами створенну дерективу @set
+$hash - це почта користувача,
+s=55 - розмір картинки
+d=mm - якщо користувач незнайдений отображаємо mm - що означає пусте ізображеніє
+
+
+
+
+Route::currentRouteName() - повертає імя маршрута в якому зараз знаходиться
+<body class="no_js responsive {{ Route::currentRouteName() == 'home' ? 'page-template-home-php' : ''}} stretched"> - якщо ми знаходимось на головні сторінці прописується додаткове імя для класу
+
+
+ПЕРЕВІРКА SQL ЗАПРОСІВ:
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap any application services.
+     *
+     * @return void
+     */
+    public function boot()
+    {
+        Schema::defaultStringLength(191);
+
+        ...
+
+        DB::listen(function($query) {
+            echo "<h1>".$query->sql."</h1>";
+        }); - данний фрагмент коду відповідає за відображення визиваємих нами sql запросів
+    }
+
+
+    ...
+
+}
+
+
+Форміруємо древовідний вивод для Коментарів:
+1.застосовуємо функції groupBy();
+$article->comments->groupBy('parent_id'); - тепер в нас є массив
+де значення parent_id = id
+тобто
+в нас є 2 записи де parent_id = 0
+1 запис де parent_id = 1
+1 запис де parent_id = 3
+і 1 запис де parent_id = 4
+тобто наш массив буде складатись 
+з 
+[0] => [Comment, Comment],
+[1] => Comment,
+[3] => Comment,
+[4] => Comment
+
+
+@if(!Auth::check()) - перевіряємо в шаблоні чи користувач авторизований
+
+
+Ми створили і підключили файл myscript.js який буде відповідати за асинхронне розміщення коментарів
+Для отправки форми аякс запросом ми отміняємо стандартне собитіє 
+e.preventDefault() - тобто ми відключили оновлення сторінки так як тип sumbit
+в JS ми не можемо формувати шляхи до методів фреймворка але ми можемо вказати в атрибуті форми маршрут де все методи фреймворка будуть працювати, ми формуємо окремий маршрут для обробки коментарів
+$.ajax({
+	url: $('#commentform').attr('action')
+
+}); - вигляд строки свойства url коли ми ссилаємось на атрибут action форми commentform
+
+ДЛЯ КОНТРОЛЯ АЯКС ЗАПРОСІВ:
+формується спеціальний токен який ми вказуємо в мета тегах проекта
+ <meta name = "csrf-token" content = "{{ csrf_token() }}">
+ і в наш аякс запрос дописуємо
+ headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')},
+якщо вибиває 500 помилку в джеесі то потрібно перевірити чи правильно підключився X-CSRF-TOKEN
+
+
+$validator->sometimes() - дописємо додатковий набор правил для валідації данних для опредєльоних полей.
+
+$validator->sometimes(['name', 'email'], 'required|max:255',
+         function($input){
+            return !Auth::check();
+        }); - для полей name i email правило required i max:255, 
+        будуть працювати тільки в тому плані якщо колбек функція поверне true
+
+if($validator->fails()){
+
+            return Response::json(['error' => $validor->errors()->all()]);
+        } - відповідь для аякс запроса з массивом помилок які будуть повертатись в джейсон форматі в зміні error
+
+
+$user = Auth::user(); - Обьєкт моделі аутентифікованого користувачаа
+
+
+ДУЖЕ ВАЖЛИВО: КОНТРОЛЬ ПАРАМЕТРІВ З АДРЕСНОЇ СТРОКИ
+Route::get('articles/cat/{cat_alias}', ['uses' => 'ArticleController@Index' , 'as' => 'articlesCat'])->where('cat_alias', "[\w-]+" );
+перший ключ це імя параметра до якого буде приділятись регулярне вираженніє, якщо параметр не буде йому соотвєтствувати то буде викинуто помилка "not found"
+
+ДЛЯ ГЛОБАЛЬНОГО КОНТРОЛЯ ПАРАМЕТРІВ:
+ми звертаємось до RouteServiceProvider і оприділяємо
+для обєкта Router метдо pattern, також батьківський метод функціонал якого наслідує boot() також має приймати обьєкт классу Router в якості параметру,
+відтепер для всіх параметрів чи псевдонімів "alias" буде діяти регулярний вираз
+class RouteServiceProvider extends ServiceProvider
+{
+	...
+
+    public function boot()
+    {
+        Route::pattern("alias", "[\w-\d]+");
+        parent::boot();
+    }
+
+    ...
+}
+
+
+
+ДЛЯ ЗАДАННЯ ВЛАСНОЇ СТОРІНКИ ГЕНЕРУВАННЯ 404 ПОМИЛКИ:
+ЗА РЕКОМЕНДАЦІЇ РОЗРОБНИКІВ LARAVEL
+потрібно створити шаблон з назвою resources\views\errors\404.blade.php - мінуси такого розположення в тому що в нам не завжди удобно до нього звертатись(як в данному проектів який я роблю).
+ДЛЯ СТВОРЕННЯ СВОГО ШЛЯХУ І ФАЙЛА ПОМИЛКИ:
+потрібно звернути увагу на app\Exceptions\Handler.php
+нас цікавлять 2 методи report() i render()
+
+report() - використовується для предворітєльной обработки ісключєній і як правило для цього використовується логирование помилок в опридільониий файл або отправка інформації на якийсь віддалений сервіс логірованія
+render() - служить для преобразованія ісключенія в відповідь яка буде відправленна користувачу в браузер, тоість це конкретна дія на те чи інше ісключєніє
+
+public function render($request, Exception $exception)
+    {
+        if($this->isHttpException($exception)){
+            $statusCode = $exception->getStatusCode(); - отримуємо статус код
+            if($statusCode == 404){ - перевіряємо чи він рівний нашій помилці
+                
+                $obj = new \Corp\Http\Controllers\SiteController(new \Corp\Repositories\MenusRepository(new \Corp\Menu)); - формуємо обєкт класу контроллера що використовувати необхідні нам методи для формування меню навігації
+                $navigation = $navigation = view(env('THEME').'.navigation', ['child_menu' => $obj->getChildMenu($obj->getMenu()), 'menu' => $obj->getMenu()])->render(); - меню навігації
+                
+                Log::alert('Cтранница не найдена - '.$request->url()); - передаємо інформацію в ЛОГИ разом з текстом передаєм URL до якого звертався користувач
+
+                $content = view(env('THEME').'.404')->render(); - формуєм контент
+                $footer = view(env('THEME').'.footer')->render(); - формуєм футер
+
+                return response()->view(env('THEME').'.error', ['navigation'=> $navigation, 'content' => $content, 'footer' => $footer, 'meta_desc' => 'Page is Not Found', 'keywords' => 'Page is Not Found', 'title' => 'Page is Not Found', 'bar' => 'no']); - передаємо в файл error який підгрузить всі відповідні види які ми вказали вище
+            }
+        }
+        return parent::render($request, $exception);
+    }
+Наш код для виводу інформації 404 помилки, по суті в if ми формуємо вид і передаємо в нього певні параметри з 0
+
+ДУЖЕ ВАЖЛИВО:без response() - нічого працювати не буде, важливо вказати що це отвєт
+
+
+ action = "{{ url('/login') }} - спосіб вказання маршрута
+
+СТВОРЕННЯ ВЛАСНОЇ СТОРІНКИ АУТЕНТИФІКАЦІЇ:
+ВАЖЛИВО: В ДАННОМУ ПРИКЛАДІ Я СТВОРЮВАВ ТІЛЬКИ АУТЕНТИФІКАЦІЮ
+
+ Для створення власної сторінки аутентифікації я створив власний контроллер в якому наслідував створенний мною батьківський контроллер для удобної бередачі всіх необхідних параметрів в шаблон, і також 
+ унаслідував trait AuthenticatesUsers ;
+ protected $redirectTo = '/home';
+ $this->middleware('guest')->except('logout'); - ці дві строчки коду я взяв з стандартного контроллера LoginController так як вони є важливими для коректної роботи данного механізму
+ public function username(){
+        return 'name';
+    } - ВАЖЛИВО:ми переоприділяємо данне свойство тому що в нас в якості аутентифікації використовується не email a name
+ ПРИКЛАД:
+namespace Corp\Http\Controllers\MyAuth;
+
+use Corp\Http\Controllers\Controller;
+use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Corp\Http\Controllers\SiteController;
+
+class MyAuthController extends SiteController
+{
+    protected $redirectTo = '/home';
+
+    public function __construct()
+    {	
+    	parent::__construct(new \Corp\Repositories\MenusRepository(new \Corp\Menu));
+        $this->middleware('guest')->except('logout');
+        $this->template = env('THEME').'.login';
+    }
+
+
+    public function showLoginForm()
+    {
+        $content = view(env('THEME').'.login_content')->render();
+
+        $this->vars = array_add($this->vars, 'content', $content);
+        $this->title = 'MyLogin';
+        return $this->renderOutput();
+    }
+
+    public function username(){
+        return 'name';
+    }
+}
+
+
+
+
+
+2 ЕТАП ПЕРЕВІРКИ ЧИ КОРИСТУВАЧ АВТОРИЗОВАНИЙ ЯКЩО НІ ВИКИДУЄМО ПОМИЛКУ(1 етап в маршрутах через посрєднік 'auth')
+eсли вы используете Sentry, проверьте зарегистрированного пользователя с помощью Sentry::getUser()->id. 
+
+
+СТВОРЕННЯ МІГРАЦІЙ ДЛЯ ПРИВЛАСНЕННЯ РОЛЕЙ КОРИСТУВАЧАМ
+ми створили таблички: roles, permissions, permission_role, role_user
+за звязки відповідають: permission_role, role_user
+КОД МІГРАЦІЙ:
+		Schema::create('roles', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('permissions', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('permission_role', function (Blueprint $table) {
+            $table->increments('id');
+            $table->timestamps();
+        });
+
+        Schema::create('role_user', function (Blueprint $table) {
+            $table->increments('id');
+            $table->timestamps();
+        });
+
+Також створили міграції для задання звязків
+
+  public function up()
+    {
+        Schema::table('role_user', function (Blueprint $table) {
+            $table->integer('user_id')->unsigned()->default(1);
+            $table->foreign('user_id')->references('id')->on('users');
+
+            $table->integer('role_id')->unsigned()->default(1);
+            $table->foreign('role_id')->references('id')->on('roles');
+        });
+    }
+ public function down()
+    {
+        Schema::table('role_user', function (Blueprint $table) {
+            $table->dropForeign('role_user_user_id_foreign');
+            $table->dropColumn('user_id');
+            $table->dropForeign('role_user_role_id_foreign');
+            $table->dropColumn('role_id');
+        });
+    }
+
+     public function up()
+    {
+        Schema::table('permission_role', function (Blueprint $table) {
+            $table->integer('permission_id')->unsigned()->default(1);
+            $table->foreign('permission_id')->references('id')->on('permissions');
+            $table->integer('role_id')->unsigned()->default(1);
+            $table->foreign('role_id')->references('id')->on('roles');
+            //
+        });
+    }
+
+    public function down()
+    {
+        Schema::table('permission_role', function (Blueprint $table) {
+           $table->dropForeign('permission_role_permission_id_foreign');
+            $table->dropColumn('permission_id');
+            $table->dropForeign('permission_role_role_id_foreign');
+            $table->dropColumn('role_id');
+        });
+    }
+
+
+
+
+РЕАЛІЗАЦІЯ СВЯЗІ БАГАТО ДО БАГАТЬОХ В МОДЕЛІ:
+    public function roles(){
+        return $this->belongsToMany('Corp\Role', 'role_user');
+    }
+   перший параметр це шлях до моделі, другий связна табличка.
+
+
+
+ Перевірка чи є в користувача дозвіл на виконання дії:
+ перевірити права і превілегії користувача ми можемо як написати в AuthServiceProvider так і використовуючи класси політиків безопасності
+
+ КОНТРОЛЛЕР:(як я прописав доступ, в мене чогось в контроллері напряму нічого не працювало)
+
+  public function __construct(){
+    	parent::__construct();
+    	$this->template = env('THEME').'.admin.index';
+    	$this->checkAccess();
+    }
+
+    public function checkAccess(){
+    	if(Auth::check()){
+    		if(Gate::denies('VIEW_ADMIN', Auth::user())){
+    			abort(403);
+    		}
+    	}	
+    }
+
+
+ФАСАД Gate - це фасад AuthServiceProvider-а 
+
+AuthServiceProvider {
+
+  public function boot()
+    {
+
+        $this->registerPolicies();
+
+        Gate::define('VIEW_ADMIN', function($user){
+            return $user->canDo('VIEW_ADMIN');
+            //це нами створений метод який перевіряє превілегії користувача
+        	//$user - модель користувача авторизованого
+        });
+        //VIEW_ADMIN - це правило яке ми описали в таблиці permissions
+    }
+
+}
+
+
+СТВОРЮЄМО ПЕРЕВІРКИ ЧЕРЕЗ ПОЛІТИК БЕЗОПАСНОСТІ:
+if(Auth::check()){
+    if(Gate::denies('save', new \Corp\Article)){ - якщо ми викоритсовуємо політик безопасності в якості 2 параметра нам необхідно передати модель
+        abort(403);
+    }
+}
+
+php artisan make:policy ArticlePolicy
+
+сlass ArticlePolicy{
+
+	...
+
+    public function save(User $user){
+        return $user->canDo("ADD_ARTICLES"); - визиваємо створений нами метод в моделі User якщо він поверне true доступ буде дозволено
+    }
+}
+
+і ОБОВЯЗКОВО РЕЄСТРУЄМО НАШ ПОЛІТИК БЕЗОПАСНОСТІ:
+   
+AuthServiceProvider{
+    
+    protected $policies = [
+        \Corp\Article::class => \Corp\Policies\ArticlePolicy::class,
+    ];
+
+    ...
+}
+
+
+
+
+ДЛЯ ПРОХОДЖЕННЯ ВАЛІДАЦІЇ МИ СТВОРИЛИ ФАЙЛ ArticleRequest:
+
+php artisan make:request ArticleRequest
+
+файл знаходиться app\http\requests
+
+class ArticleRequest extends FormRequest
+{
+    public function authorize() - якщо true то доступ до пріложенія дозволено
+    {
+        if(Auth::check()){
+            return Auth::user()->canDo('ADD_ARTICLES');
+        }
+
+        return false;
+    } - в данному методі можна перевіряти права користувача 
+
+    public function rules() - для вписання правил валідації
+    {
+        return [
+            'title' => 'required|max:255',
+            'text' => 'required',
+            'category_id' => 'required|integer',
+        ]; 
+    }
+}
+
+і далі в метод який має проходити валідацію ми маємо передати не звичайний обьєкт Request а вже наш ArticleRequest
+
+    public function store(ArticleRequest $request)
+    {
+        
+    }
+
+після цього валідація вже має працювати
+
+
+ArticleRequest{
+    protected function getValidatorInstance()
+    {
+        $validator = parent::getValidatorInstance();- для получення обєкту валідатора звертаємось до родітєльского классу 
+        
+        $validator->sometimes('alias' , 'unique:articles|max:100'), function($input){
+
+            if($this->route()->hasParameter('articles')){// якщо в строці url переданий параметр 'articles'
+                $model = $this->route()->parameter('articles');//получаємо модель через параметр так як в нас вказано що у якості параметра 'articles' ми повертаємо модель псевдонім якої ми передаємо в url(дивитись RouteServiceProvider)
+
+                return ($model->alias !== $input->alias) && !empty($input->alias)//якщо поле моделі != введенному значенню в формі і якщо введене поле не пусте повертаємо істину
+            }
+
+            return !empty($input->alias);
+        });//вказуємо що данне поле можна вказувати можна не вказути, але якщо ми його вказали воно має пройти валідацію
+
+        return $validator;//обовязково має повертати обьєкт валідатора
+    }
+}
+
+
+
+
+$request->flash(); - збергіаємо в сесссію всі передані поля, для того щоб коли користувач не пройде валідацію ми їх повернули як вже введені значення
+
+
+
+
+
+
+
+КАРТИНКИ: 
+ДОПОВНЕННЯ ДЛЯ РОБОТИ З НИМ: Intervention Image
+ссилка:image.intervention.io
+
+я устанавлював так: 
+перейшов в файл composer.json
+і добавив таку строку в свойство require
+"require": {
+        ...
+        "intervention/image": "2.*"
+    },
+
+і потім виконав КОНСОЛЬ: composer update
+якщо виникає помилка спробувати: composer self-update
+
+Реєструємо сервіс провайдер добавленного класса в сonfig/app
+'providers' => [
+    ...
+    Intervention\Image\ImageServiceProvider::class,
+    ...
+]
+
+'aliases' => [
+    ...
+    'Image' => Intervention\Image\Facades\Image::class,
+]
+
+$img = Image::make($image); вибираємо фото, в якості параметра має передатися обьєкт файлу
+
+$img->crop(int $width, int $height, [int $x, int $y]) - обрізаємо картинку. $x i $y можна задати координати звідки починати обрізати(якщо не задавати все починається з лівого вєрхнього угла)
+
+$img->resize($widht, $height); - змініюємо розмір картинки
+
+$img->fit() - разом взяті crop i resize
+
+$img->save(public_path().'/'.env('THEME').'/images/articles/'.$obj->path); - сохраняємо картинку, в якості параметра передаємо шлях куди зберігати
+
+
+
+if($request->hasFile('img')){//провіряємо налічіє файла картинки
+    $image = $request->file('image');//записуємо обєкт картинки в перемінну
+
+    if($image->isValid()){
+    $str = str_random(8);//генеруємо случайну строку з 8 символів
+
+    $obj = new \stdClass;\\ створюємо пустий обьєкт для того щоб преобразити його потім в формат джейсон
+    $obj->mini = $str.'_mini.jpg';
+    $obj->max = $str.'_max.jpg';
+    $obj->path = $str.'.jpg';
+
+    }
+}
+
+
+
+
+Варіанти отримання моделі при передачі:
+1.
+public function edit($alias)
+{
+    $article = Article::where('alias', $alias)->first();
+}
+
+2.
+public funcion edit(Article $article){
+    dd($article);
+}
+Данний варіант доступний лише тоді коли в адресній строці передається id. Але якщо вказати
+
+RouteServiceProvider{
+    public function boot()
+    {
+        parent::boot();
+        Route::bind('articles', function ($value){
+            return \Cort\Article::where('alias', $value)->first;
+        });// данним кодом ми привязуємо для параметра 'articles' обьект моделі Article де поле alias = значенню передаваємому в строці
+
+        параметр в нас "articles" - так як це контроллер типу resource і ми не вказали йому конкретне імя для параметрів
+    }
+}
+
+
+
+ВАЖЛИВО: при редагуванні сторінки ми маємо відправляти запрос типу PUT тому ми перевіряємо чи ми редагуємо сторінку якщо так 
+то формуємо скрите поле яке задасть тип запросу
+@if($aricle->id)
+    <input type="hidden" name="_method" value = "PUT"> або @method('PUT')
+@endif
+
+
+
+$article->comments()->delete();//удаляємо всі коментарі привязані до статті $article
+
+
+
+
+
+КОРИСНО
+<input type="checkbox" id="" name = "{{ $role->id }}[]" value = " {{ $perm->id }}" checked> - [] в свойстві name сформують нам массив, тобто якщо зустрінуться ще одні поля з таким же іменнем вони помістяться в массив
+
+
+КОРИСНО
+$role->permissions()->sync($array); - реалізує синхронізацію связаних моделей через связующу таблицю через id(проще говоря порівнює массив який передається в 1 параметрі з id связаної моделі і родітєльської якщо щось співпадає то вони залишаються якщо шось нове вони додаються якщо немає чогось вони видаляється)
+
+
+$role->permissions()->detach(); - для відвязування связєй
